@@ -1,0 +1,3 @@
+S001 Alice 20
+S002 Bob 21
+S003 Carol 19

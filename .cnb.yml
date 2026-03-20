@@ -1,0 +1,75 @@
+main:
+  pull_request:
+    - env:
+        SCORE: 0
+    - docker:
+        build: Dockerfile  # 使用项目根目录的Dockerfile
+      stages:
+        - name: setup
+          jobs:
+            - name: prepare
+              script: |
+                echo "当前工具链版本："
+                gcc --version | head -n1
+                make --version | head -n1
+                jq --version
+                echo "✅ 环境验证通过"
+
+        - name: build
+          jobs:
+            - name: compile
+              script: |
+                mkdir -p build
+                # 编译检查器和所有必要的组件
+                make c-checker
+        - name: test
+          jobs:
+            - name: run-tests
+              allowFailure: true
+              script: |
+                # 运行所有练习题测试并生成JSON报告
+                ./c-checker check-all
+                # 显示测试结果摘要
+                echo "测试完成！查看详细报告："
+                cat test_results_summary.json | jq '.test_summary'
+                # 验证测试结果
+                PASSED_COUNT=$(cat test_results_summary.json | jq '.test_summary.passed_exercises')
+                # 获取总分数并输出为环境变量
+                SCORE=$(cat test_results_summary.json | jq -r '.test_summary.total_score')
+                # 使用set-output格式输出变量，以便后续导出
+                echo "##[set-output score=$SCORE]"
+                
+                if [ $PASSED_COUNT -eq 20 ]; then
+                  echo "✅ 所有20个练习题测试通过！"
+                  exit 0
+                else
+                  echo "❌ 测试失败：只有 $PASSED_COUNT/20 个练习题通过"
+                  exit 1
+                fi
+                echo $SCORE
+              # 导出环境变量
+              exports:
+                score: SCORE
+        - name: send score to opencamp
+          image: docker.cnb.cool/opencamp/learning-docker/send-score-to-opencamp:latest
+          settings:
+            COURSE_ID: 1785
+            SCORE: $SCORE
+            USER: $CNB_BUILD_USER
+            CHANNEL: cnb
+            TOKEN: 2b9e48a09ec34120ae425ee374480780
+
+$:
+  vscode:
+    - docker:
+        image: docker.cnb.cool/looc/default-dev-env:latest
+      runner:
+        tags: cnb:arch:amd64
+      services:
+        - vscode
+        - docker
+      stages:
+        - name: setup
+          script: |
+            apt-get update
+            apt-get install -y make jq

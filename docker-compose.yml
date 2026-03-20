@@ -1,0 +1,13 @@
+services:
+  c-training-advanced:
+    container_name: c-training-advanced
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    image: docker.cnb.cool/opencamp/learning-c/default-c-dev-env/c-ci:latest
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
