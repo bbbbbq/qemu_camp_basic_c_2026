@@ -143,9 +143,9 @@ jobs:
       - name: Check token availability
         id: qemu-token
         env:
-          OPENCAMP_TOKEN: ${{ secrets.LEARNING_QEMU_2025_AUTUMN_TOKEN }}
-          OPENCAMP_API_URL: ${{ secrets.LEARNING_QEMU_2025_COURSE_POST_API }}
-          OPENCAMP_COURSE_ID: ${{ secrets.LEARNING_QEMU_2025_AUTUMN_COURSE_ID }}
+          OPENCAMP_TOKEN: ${{ secrets.LEARNING_QEMU_2026_AUTUMN_TOKEN }}
+          OPENCAMP_API_URL: ${{ secrets.LEARNING_QEMU_2026_COURSE_POST_API }}
+          OPENCAMP_COURSE_ID: ${{ secrets.LEARNING_QEMU_2026_AUTUMN_COURSE_ID }}
         run: |
           if [ -z "$OPENCAMP_TOKEN" ] || [ -z "$OPENCAMP_API_URL" ] || [ -z "$OPENCAMP_COURSE_ID" ]; then
             echo "enabled=false" >> "$GITHUB_OUTPUT"
@@ -155,15 +155,15 @@ jobs:
 
       - name: Mark skipped when reporting secrets are missing
         if: steps.qemu-token.outputs.enabled != 'true'
-        run: echo "OpenCamp QEMU reporting skipped because LEARNING_QEMU_2025_COURSE_POST_API, LEARNING_QEMU_2025_AUTUMN_TOKEN, or LEARNING_QEMU_2025_AUTUMN_COURSE_ID is not configured." >> "$GITHUB_STEP_SUMMARY"
+        run: echo "OpenCamp QEMU reporting skipped because LEARNING_QEMU_2026_COURSE_POST_API, LEARNING_QEMU_2026_AUTUMN_TOKEN, or LEARNING_QEMU_2026_AUTUMN_COURSE_ID is not configured." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Send score to OpenCamp QEMU
         id: report-qemu
         if: steps.qemu-token.outputs.enabled == 'true'
         env:
-          OPENCAMP_API_URL: ${{ secrets.LEARNING_QEMU_2025_COURSE_POST_API }}
-          OPENCAMP_TOKEN: ${{ secrets.LEARNING_QEMU_2025_AUTUMN_TOKEN }}
-          OPENCAMP_COURSE_ID: ${{ secrets.LEARNING_QEMU_2025_AUTUMN_COURSE_ID }}
+          OPENCAMP_API_URL: ${{ secrets.LEARNING_QEMU_2026_COURSE_POST_API }}
+          OPENCAMP_TOKEN: ${{ secrets.LEARNING_QEMU_2026_AUTUMN_TOKEN }}
+          OPENCAMP_COURSE_ID: ${{ secrets.LEARNING_QEMU_2026_AUTUMN_COURSE_ID }}
           GITHUB_USER: ${{ github.actor }}
           TOTAL_SCORE: ${{ needs.autograde.outputs.total_score }}
           MAX_SCORE: ${{ needs.autograde.outputs.max_score }}
