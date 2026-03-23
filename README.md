@@ -69,7 +69,14 @@
 1. 编译 `c-checker`
 2. 执行 `./c-checker check-all`
 3. 生成 `test_results_summary.json`
-4. 在配置好 OpenCamp secrets 后，把分数回传到 OpenCamp 榜单
+4. 生成 GitHub Job Summary 和测试产物
+5. 在配置好 OpenCamp secrets 后，把分数回传到 OpenCamp 榜单
+
+当前 workflow 同时支持：
+
+- 普通 GitHub 仓库直接 `push main`
+- GitHub Classroom 生成的学生仓库直接 `push main`
+- `pull_request` 场景下只做评测，不回传 OpenCamp
 
 工作流文件在 `.github/workflows/opencamp-autograding.yml`。
 
@@ -77,12 +84,32 @@
 
 如果你希望 GitHub Actions 的成绩显示到 OpenCamp 页面，需要在 GitHub 仓库里配置这些 secrets：
 
-- `OPENCAMP_COURSE_ID_C`
 - `OPENCAMP_TOKEN_C`
-- `OPENCAMP_COURSE_ID_QEMU`
 - `OPENCAMP_TOKEN_QEMU`
 
-如果只需要回传到其中一个榜单，只配置对应那一组 secrets 即可。
+当前 workflow 已内置课程 ID：
+
+- C 课程：`1786`
+- QEMU 课程：`1901`
+
+如果只需要回传到其中一个榜单，只配置对应的 token 即可。
+
+### GitHub Classroom 使用建议
+
+如果你打算通过 GitHub Classroom 发作业，推荐这样使用：
+
+1. 把这个仓库作为 Classroom template repository
+2. 让每个学生获得自己的独立作业仓库
+3. 学生直接向自己仓库的 `main` 分支提交代码
+4. 由学生仓库内的 GitHub Actions 自动评测并回传 OpenCamp
+
+注意：
+
+- fork 仓库不会自动继承原仓库的 repository secrets
+- 如果要让 GitHub Classroom 批量可用，最好在 GitHub 组织里配置 organization secrets
+- 至少需要配置：
+  - `OPENCAMP_TOKEN_C`
+  - `OPENCAMP_TOKEN_QEMU`
 
 ### 1. 编译检查器
 
@@ -146,3 +173,5 @@ qemu_camp_basic_c/
 - 专业阶段题目为了合并成一套连续题库，编号已从 `21` 开始重排
 - `20_mybash` 仍然保留原来的多模块目录结构
 - 原有的 CNB 流水线配置已经移除，当前只保留 GitHub Actions 方案
+- 质量门禁会在 GitHub Checks 中明确显示是否已满分通过
+- OpenCamp 回传 job 与质量门禁分离，未满分时也能继续上报当前得分

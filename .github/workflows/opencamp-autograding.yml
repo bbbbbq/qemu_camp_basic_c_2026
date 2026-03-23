@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - master
     paths-ignore:
       - "README.md"
       - "docs/**"
@@ -11,6 +12,7 @@ on:
   pull_request:
     branches:
       - main
+      - master
     paths-ignore:
       - "README.md"
       - "docs/**"
@@ -22,6 +24,12 @@ permissions:
 
 env:
   OPENCAMP_API_URL: https://api.opencamp.cn/web/api/courseRank/createByThirdToken
+  OPENCAMP_COURSE_ID_C: "1786"
+  OPENCAMP_COURSE_ID_QEMU: "1901"
+
+concurrency:
+  group: opencamp-autograding-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   autograde:
@@ -74,21 +82,83 @@ jobs:
           name: test-results-summary
           path: test_results_summary.json
 
+      - name: Publish job summary
+        shell: bash
+        run: |
+          total_exercises='${{ steps.summary.outputs.total_exercises }}'
+          passed_exercises='${{ steps.summary.outputs.passed_exercises }}'
+          failed_exercises='${{ steps.summary.outputs.failed_exercises }}'
+          not_completed_exercises='${{ steps.summary.outputs.not_completed_exercises }}'
+          total_score='${{ steps.summary.outputs.total_score }}'
+          max_score='${{ steps.summary.outputs.max_score }}'
+
+          {
+            echo "## OpenCamp Autograding Summary"
+            echo
+            echo "- Repository: \`${{ github.repository }}\`"
+            echo "- Actor: \`${{ github.actor }}\`"
+            echo "- Event: \`${{ github.event_name }}\`"
+            echo "- Ref: \`${{ github.ref_name }}\`"
+            echo "- Passed Exercises: ${passed_exercises}/${total_exercises}"
+            echo "- Failed Exercises: ${failed_exercises}"
+            echo "- Not Completed Exercises: ${not_completed_exercises}"
+            echo "- Score: ${total_score}/${max_score}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  quality-gate:
+    name: Quality Gate
+    runs-on: ubuntu-latest
+    needs: autograde
+    if: always()
+    steps:
+      - name: Enforce full score for checks
+        shell: bash
+        run: |
+          total_exercises='${{ needs.autograde.outputs.total_exercises }}'
+          passed_exercises='${{ needs.autograde.outputs.passed_exercises }}'
+          total_score='${{ needs.autograde.outputs.total_score }}'
+          max_score='${{ needs.autograde.outputs.max_score }}'
+
+          if [ -z "$total_exercises" ] || [ -z "$passed_exercises" ]; then
+            echo "Missing autograding outputs."
+            exit 1
+          fi
+
+          if [ "$passed_exercises" -eq "$total_exercises" ]; then
+            echo "All ${total_exercises} exercises passed. Score ${total_score}/${max_score}."
+            exit 0
+          fi
+
+          echo "Only ${passed_exercises}/${total_exercises} exercises passed. Score ${total_score}/${max_score}."
+          exit 1
+
   report-opencamp-c:
     name: Report Score To OpenCamp C
     runs-on: ubuntu-latest
     needs: autograde
-    if: github.event_name != 'pull_request' && secrets.OPENCAMP_TOKEN_C != '' && secrets.OPENCAMP_COURSE_ID_C != ''
+    if: always() && github.event_name != 'pull_request' && needs.autograde.outputs.total_score != ''
     steps:
       - name: Install jq
         run: |
           sudo apt-get update
           sudo apt-get install -y jq
 
-      - name: Send score to OpenCamp C
+      - name: Check token availability
+        id: c-token
         env:
           OPENCAMP_TOKEN: ${{ secrets.OPENCAMP_TOKEN_C }}
-          OPENCAMP_COURSE_ID: ${{ secrets.OPENCAMP_COURSE_ID_C }}
+        run: |
+          if [ -z "$OPENCAMP_TOKEN" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Send score to OpenCamp C
+        if: steps.c-token.outputs.enabled == 'true'
+        env:
+          OPENCAMP_TOKEN: ${{ secrets.OPENCAMP_TOKEN_C }}
+          OPENCAMP_COURSE_ID: ${{ env.OPENCAMP_COURSE_ID_C }}
           GITHUB_USER: ${{ github.actor }}
           REPOSITORY: ${{ github.repository }}
           SHA: ${{ github.sha }}
@@ -130,17 +200,29 @@ jobs:
     name: Report Score To OpenCamp QEMU
     runs-on: ubuntu-latest
     needs: autograde
-    if: github.event_name != 'pull_request' && secrets.OPENCAMP_TOKEN_QEMU != '' && secrets.OPENCAMP_COURSE_ID_QEMU != ''
+    if: always() && github.event_name != 'pull_request' && needs.autograde.outputs.total_score != ''
     steps:
       - name: Install jq
         run: |
           sudo apt-get update
           sudo apt-get install -y jq
 
-      - name: Send score to OpenCamp QEMU
+      - name: Check token availability
+        id: qemu-token
         env:
           OPENCAMP_TOKEN: ${{ secrets.OPENCAMP_TOKEN_QEMU }}
-          OPENCAMP_COURSE_ID: ${{ secrets.OPENCAMP_COURSE_ID_QEMU }}
+        run: |
+          if [ -z "$OPENCAMP_TOKEN" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Send score to OpenCamp QEMU
+        if: steps.qemu-token.outputs.enabled == 'true'
+        env:
+          OPENCAMP_TOKEN: ${{ secrets.OPENCAMP_TOKEN_QEMU }}
+          OPENCAMP_COURSE_ID: ${{ env.OPENCAMP_COURSE_ID_QEMU }}
           GITHUB_USER: ${{ github.actor }}
           REPOSITORY: ${{ github.repository }}
           SHA: ${{ github.sha }}
@@ -177,3 +259,28 @@ jobs:
             -H "Content-Type: application/json" \
             -H "token: $OPENCAMP_TOKEN" \
             -d "$payload"
+
+  report-configuration:
+    name: Configuration Help
+    runs-on: ubuntu-latest
+    needs: autograde
+    if: always() && github.event_name != 'pull_request'
+    steps:
+      - name: Explain reporting prerequisites
+        shell: bash
+        run: |
+          missing=0
+
+          if [ -z "${{ secrets.OPENCAMP_TOKEN_C }}" ]; then
+            echo "OpenCamp C reporting is disabled because OPENCAMP_TOKEN_C is not configured." >> "$GITHUB_STEP_SUMMARY"
+            missing=1
+          fi
+
+          if [ -z "${{ secrets.OPENCAMP_TOKEN_QEMU }}" ]; then
+            echo "OpenCamp QEMU reporting is disabled because OPENCAMP_TOKEN_QEMU is not configured." >> "$GITHUB_STEP_SUMMARY"
+            missing=1
+          fi
+
+          if [ "$missing" -eq 0 ]; then
+            echo "OpenCamp reporting tokens are configured for this repository." >> "$GITHUB_STEP_SUMMARY"
+          fi
